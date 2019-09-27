@@ -10,22 +10,39 @@ from telegram.error import BadRequest
 from telegram import ParseMode, InlineKeyboardMarkup
 
 from app.src.bot_constants import *
+from app import IMAGE_CONTROLLER_PORT, IMAGE_CONTROLLER_IP
 
 logger = logging.getLogger()
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - ' \
-         '%(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
 
-IMAGE_CONTROLLER_PORT = os.environ.get('IMAGE_CONTROLLER_PORT', 5000)
-IMAGE_CONTROLLER_IP = os.environ.get('IMAGE_CONTROLLER_IP', '159.65.57.62')
+
+def admin_required(function):
+    """ Verify bot in channel admins
+    
+    :param function: function to decorate
+    :type function: function
+    """
+    def wrapper(bot, update, *args, **kwargs):
+        splitted = update.callback_query.data.split(':')
+        channel_id = splitted[1]
+        channel_name = splitted[2]
+        try:
+            bot.get_chat_administrators(channel_id)
+        except Exception as err:
+            bot.send_message(
+                chat_id=update.effective_chat.id,
+                parse_mode=ParseMode.HTML,
+                text=Messages.NEED_ADMIN.format(channel_name))
+            return None
+            
+        return function(bot, update, *args, **kwargs)
+    return wrapper
 
 
 class Buttons(object):
     """ Bot buttons
     """
     @staticmethod
-    def get_button(action, label, channel_id, channel_name):
+    def get_button(action, label, channel_id, channel_name, *additional):
         """ Get button according to labels, actions and channel creds
 
         :param action: button action
@@ -36,11 +53,19 @@ class Buttons(object):
         :type channel_id: int
         :param channel_name: channel name
         :type channel_name: basestring
+        :param additional: additional fields
+        :type additional: list with str
         :return: button object
         :rtype: InlineKeyboardButton
         """
-        return InlineKeyboardButton(label, callback_data='{0}:{1}:{2}'
-                                    .format(action, channel_id, channel_name))
+        additional_fields = ''
+        for field in additional:
+            additional_fields += ':{0}'.format(field)
+        return InlineKeyboardButton(label, callback_data='{0}:{1}:{2}{3}'
+                                    .format(action, 
+                                            channel_id, 
+                                            channel_name, 
+                                            additional_fields))
 
     # Back to channel list button
     BACK = staticmethod(
@@ -68,6 +93,7 @@ def send_response(bot, update, new_text, reply_markup=None,
     :type parse_mode: ParseMode.HTML
     :return: None
     """
+    logger.debug('Sending/editting message with text <{0}>, reply_markup <{1}>'.format(new_text, reply_markup))
     if update.message:
         bot.send_message(
             chat_id=update.effective_chat.id,
@@ -85,7 +111,7 @@ def send_response(bot, update, new_text, reply_markup=None,
                 reply_markup=reply_markup
             )
         except BadRequest as err:
-            logging.error(err)
+            logging.error('Failed to send/edit message. Reason: {0}.'.format(err))
         update.callback_query.answer()
 
 
@@ -133,9 +159,9 @@ def user_in_channel(bot, user_id, channel_id):
     """
     try:
         return bot.get_chat_member(channel_id, user_id).status != 'left'
-    except Exception as e:
-        logging.warning('Exception while getting user <{0}> from chat <{1}>, '
-                        'reason: {2}'.format(user_id, channel_id, e))
+    except Exception as err:
+        logger.warning('exception while getting <user:{0}> from <chat:{1}>, '
+                       'reason: {2}'.format(user_id, channel_id, err))
         return False
 
 

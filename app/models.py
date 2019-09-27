@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 
+import logging
 from datetime import datetime, timedelta
 
 from app.src.bot_constants import *
 from app.src.utils import *
 from . import db, db_session
+
+logger = logging.getLogger()
 
 
 class Channel(db.Model):
@@ -12,14 +15,15 @@ class Channel(db.Model):
     __table_args__ = {'extend_existing': True}
 
     channel_id = db.Column(db.BigInteger, primary_key=True)
-    name = db.Column(db.String(CHANNEL_FULL_NAME_LENGTH), nullable=False,
-                     convert_unicode=True)
+    name = db.Column(db.String(CHANNEL_FULL_NAME_LENGTH),
+                     nullable=False)
     username = db.Column(db.String(CHANNEL_NAME_MAX_LENGTH), nullable=False,
                          unique=True)
     admin = db.Column(db.String(USERNAME_MAX_LENGTH), nullable=False)
-    message = db.Column(db.Text, convert_unicode=True)
+    message = db.Column(db.Text)
     is_running = db.Column(db.Boolean, default=True)
     due_date = db.Column(db.DateTime, nullable=True)
+    has_infinite_subsribe = db.Column(db.Boolean, default=False)
 
     inviters = db.relationship('ChannelInviter', back_populates="channel")
     receivers = db.relationship('Referral', back_populates='channel')
@@ -31,7 +35,7 @@ class Channel(db.Model):
         self.name = name
         self.admin = admin
         self.message = message or Messages.INLINE_MESSAGE.format(channel=name)
-        self.due_date = datetime.today() + timedelta(days=1)
+        self.due_date = due_date or datetime.today() + timedelta(days=1)
 
     def __repr__(self):
         return '<Channel {0}>'.format(self.name)
@@ -123,7 +127,7 @@ class Referral(db.Model):
             channel_id=channel_id).all()
         for user_id in new_users:
             if not user_in_channel(bot, user_id[0], channel_id):
-                logging.debug('User <{0}> not in channel <{1}>'
+                logger.debug('<user:{0}> not in <channel:{1}>'
                               .format(user_id, channel_id))
                 new_users.remove(user_id)
         return [user[0] for user in new_users]

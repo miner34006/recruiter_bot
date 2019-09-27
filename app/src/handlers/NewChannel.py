@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from datetime import datetime, timedelta
 import logging
 
 from telegram.ext import CommandHandler, ConversationHandler, \
@@ -11,13 +12,9 @@ from app.src.bot_constants import *
 from app.src.utils import *
 
 logger = logging.getLogger()
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - ' \
-         '%(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
+
 
 GET_FORWARDED = 0
-
 
 class NewChannel(object):
     @staticmethod
@@ -62,18 +59,6 @@ class NewChannel(object):
         send_response(bot, update, Messages.CHANNEL_ADD)
         return GET_FORWARDED
 
-    # @staticmethod
-    # def not_forwarded(bot, update):
-    #     """ Message for user that his message is not message from channel
-
-    #     :param bot: bot
-    #     :type bot: telegram.Bot
-    #     :param update: update event
-    #     :type update: relegram.Update
-    #     """
-    #     logger.warning('Not a forwarded message was received')
-    #     send_response(bot, update, Messages.NOT_CHANNEL_MESSAGE)
-    #     return GET_FORWARDED
 
     @staticmethod
     def receive_forwarded(bot, update):
@@ -118,8 +103,15 @@ class NewChannel(object):
                 return GET_FORWARDED
 
             name = update.message.forward_from_chat.title
-            channel = Channel(channel_id, channel_username, name,
-                              update.message.from_user.username)
+            username = update.message.from_user.username
+            channels =  db_session.query(Channel).filter_by(admin=username)
+
+            due_date = datetime.today() + timedelta(days=1) \
+                if db_session.query(channels.exists()).scalar() \
+                else datetime.today() + timedelta(days=6)
+
+            channel = Channel(channel_id, channel_username, name, username,
+                              due_date=due_date)
             db_session.add(channel)
             db_session.commit()
 
@@ -128,9 +120,10 @@ class NewChannel(object):
             if logo_url:
                 download_image(logo_url, channel_id, 'logo')
 
-            send_response(bot, update, Messages.CHANNEL_ADD_SUCCESS
-                          .format(channel_username,
-                                  channel.due_date.strftime("%d-%m-%Y %H.%M")))
+            send_response(bot, update,
+                          Messages.CHANNEL_ADD_SUCCESS.format(
+                              channel_username,
+                              channel.due_date.strftime("%d-%m-%Y %H.%M")))
 
             return ConversationHandler.END
 

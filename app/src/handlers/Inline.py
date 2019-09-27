@@ -4,6 +4,7 @@ import uuid
 import logging
 from datetime import datetime
 
+from sqlalchemy import or_
 from telegram import InlineKeyboardButton, \
                      InlineQueryResultArticle, \
                      InputTextMessageContent
@@ -15,10 +16,6 @@ from app.src.bot_constants import *
 from app.src.utils import *
 
 logger = logging.getLogger()
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - ' \
-         '%(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
 
 
 class Inline(object):
@@ -138,7 +135,7 @@ class Inline(object):
             .filter(Channel.name.startswith(update.inline_query.query),
                     ChannelInviter.inviter_id == update.effective_user.id,
                     Channel.is_running == True,
-                    Channel.due_date >= datetime.now())
+                    or_(Channel.due_date >= datetime.now(), Channel.has_infinite_subsribe == True))
 
         results = []
         for channel_id, channel_name, channel_message, code in db_query:
@@ -149,14 +146,14 @@ class Inline(object):
                     description='Порекомендовать сообщество',
                     id=uuid.uuid4(), title=channel_name,
                     input_message_content=InputTextMessageContent(
-                        channel_message, parse_mode=ParseMode.HTML))
+                        channel_message + Messages.INLINE_GUIDE,
+                        parse_mode=ParseMode.HTML))
             )
         return update.inline_query.answer(results,
                                           is_personal=True,
                                           cache_time=60)
 
 # !UTILS FUNCTIONS
-
 
 def get_inline_keyboard(unique_code):
     """ Function to get inline keyboard for inline bot first message (SHOW LINK).

@@ -14,10 +14,6 @@ from app.src.bot_constants import *
 from app.src.utils import *
 
 logger = logging.getLogger()
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - ' \
-         '%(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
 
 
 class Statistics(object):
@@ -56,11 +52,13 @@ class Statistics(object):
         :param update: update event
         :type update: relegram.Update
         """
+        logger.debug('<user:{0}>: request for statistics'.format(
+            update.effective_user.id))
         username = update.effective_user.username
         channels = db_session.query(Channel).filter_by(admin=username)
         if not db_session.query(channels.exists()).scalar():
-            logger.info('User <{0}> has no channels for statistics'
-                        .format(username))
+            logger.debug('<user:{0}> no channels available for stat'.format(
+                update.effective_user.id))
             return send_response(bot, update, Messages.NO_REFERRAL_CHANNELS)
 
         buttons = [InlineKeyboardButton(channel.username,
@@ -75,6 +73,7 @@ class Statistics(object):
                              create_inline_keyboard(buttons, width=3))
 
     @staticmethod
+    @admin_required
     def channel_statisctics(bot, update):
         """ Show user all available channel statistics
 
@@ -84,6 +83,8 @@ class Statistics(object):
         :type update: relegram.Update
         """
         _, channel_id, channel_name = update.callback_query.data.split(':')
+        logger.debug('<user:{0}>: request stats for <channel:{1}>'.format(
+            update.effective_user.id, channel_id))
 
         new_users_count, top_users_stats = get_channel_statistics(bot,
                                                                   channel_id,
@@ -105,6 +106,7 @@ class Statistics(object):
         return send_response(bot, update, report_text, keyboard)
 
     @staticmethod
+    @admin_required
     def full_channel_statistics(bot, update):
         """ Get full channel statistics via file
 
@@ -114,8 +116,10 @@ class Statistics(object):
         :type update: relegram.Update
         """
         _, channel_id, channel_name = update.callback_query.data.split(':')
-        _, csv_data = get_channel_statistics(bot, channel_id, db_session)
+        logger.debug('<user:{0}>: request csv creation for <channel:{1}>'.format(
+            update.effective_user.id, channel_id))
 
+        _, csv_data = get_channel_statistics(bot, channel_id, db_session)
         csv_data.insert(0, ['username', 'invited_users_count'])
 
         csv_file_path = '/tmp/{0}.csv'.format(channel_name)
@@ -131,6 +135,7 @@ class Statistics(object):
         update.callback_query.answer()
 
     @staticmethod
+    @admin_required
     def channel_clear(bot, update):
         """ Clear statistics data of the selected channel
 
@@ -140,6 +145,9 @@ class Statistics(object):
         :type update: relegram.Update
         """
         _, channel_id, channel_name = update.callback_query.data.split(':')
+        logger.debug('<user:{0}>: request clearing stats for <channel:{1}>'.format(
+            update.effective_user.id, channel_id))
+
         Referral.query.filter(Referral.channel_id == channel_id).delete()
         db_session.commit()
         return Statistics.channel_statisctics(bot, update)
@@ -157,8 +165,11 @@ def get_channel_statistics(bot, channel_id, db_session):
     :return: total count of new users, top referrals
     :rtype: tuple
     """
+    logger.debug('Getting stats for <channel:{0}>'.format(channel_id))
+
     new_users = set(Referral.get_new_users(bot, channel_id))
-    logger.debug('New users from referral program <{0}>'.format(new_users))
+    logger.debug('new users from referral program: {0}'.format(new_users))
+
     top_users = db_session \
         .query(Referral.inviter_id, Inviter.name) \
         .join(Inviter, Referral.inviter_id == Inviter.inviter_id) \
@@ -177,7 +188,8 @@ def get_channel_statistics(bot, channel_id, db_session):
     top_users_stats = sorted(top_users_stats,
                              key=lambda data: data[1],
                              reverse=True)
-    logger.debug('Top users statistics <{0}>'.format(top_users_stats))
+
+    logger.debug('Top users: {0}'.format(top_users_stats))
     return len(new_users), top_users_stats
 
 
@@ -192,7 +204,7 @@ def get_user_sattistics_text(channels):
     channelsInfo = ''
     for index, channel in enumerate(channels, start=1):
         channelsInfo += '{0}. @{1}\n'.format(index, channel.username)
-    channelsInfo = 'Сообщества, в которых запущена рекрутская программа:' \
+    channelsInfo = 'Сообщества, в которых запущена реферальная программа:' \
                    '\n{0}'.format(channelsInfo)
     return '{0}\n{1}'.format(channelsInfo, Messages.SELECT_CHANNEL)
 

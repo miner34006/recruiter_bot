@@ -13,11 +13,7 @@ from app.models import Channel, Inviter, ChannelInviter, Referral
 from app.src.bot_constants import *
 from app.src.utils import *
 
-logger = logging.getLogger('root')
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - ' \
-         '%(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
+logger = logging.getLogger()
 
 
 def payment_required(finish_conversation=False):
@@ -33,7 +29,7 @@ def payment_required(finish_conversation=False):
                               keyboard)
                 if finish_conversation:
                     return ConversationHandler.END
-                return
+                return None
             return function(bot, update, *args, **kwargs)
         return wrapper
     return decorator
@@ -138,11 +134,10 @@ class Managment(object):
             return send_response(bot, update, Messages.NO_REFERRAL_CHANNELS)
 
         buttons = [
-            InlineKeyboardButton(channel.username,
-                                 callback_data='{0}:{1}:{2}'
-                                 .format(Commands.MANAGMENT,
-                                         channel.channel_id,
-                                         channel.username))
+            Buttons.get_button(Commands.MANAGMENT, 
+                               label=channel.username, 
+                               channel_id=channel.channel_id, 
+                               channel_name=channel.username)
             for channel in channels
         ]
         keyboard = create_inline_keyboard(buttons, width=3)
@@ -153,6 +148,7 @@ class Managment(object):
 
     @staticmethod
     @payment_required()
+    @admin_required
     def channel_managment(bot, update):
         """ Show user all available managment actions with current channel settings:
         1. Start referral program;
@@ -167,9 +163,8 @@ class Managment(object):
         """
         _, channel_id, channel_name = update.callback_query.data.split(':')
         channel = Channel.query.get(channel_id)
-        keyboard = get_managment_keyboard(channel_id, channel_name)
-        text = get_managment_statistics(channel_name, channel.due_date,
-                                        channel.is_running, channel.message)
+        keyboard = get_managment_keyboard(channel)
+        text = get_managment_statistics(channel)
         return send_response(bot, update, text, keyboard)
 
     @staticmethod
@@ -188,13 +183,13 @@ class Managment(object):
             keyboard = get_need_payment_keyboard(channel_id,
                                                  channel_name)
         else:
-            keyboard = get_managment_keyboard(channel_id,
-                                              channel_name)
+            keyboard = get_managment_keyboard(channel)
 
         return send_response(bot, update, Messages.MANAGMENT_HELP, keyboard)
 
     @staticmethod
     @payment_required()
+    @admin_required
     def change_referral_state(bot, update, is_running):
         """ Stopping referral program by stop managment button
 
@@ -214,6 +209,7 @@ class Managment(object):
 
     @staticmethod
     @payment_required(finish_conversation=True)
+    @admin_required
     def create_message(bot, update, user_data):
         """ Handler to start message creation procedure with user
 
@@ -230,8 +226,8 @@ class Managment(object):
         update.callback_query.answer()
 
         text = Messages.MESSAGE_ADD.format(channel_name)
-        keyboard = [[ButtonsLabels.PREREVIEW], [ButtonsLabels.CANCEL,
-                                                ButtonsLabels.SAVE]]
+        keyboard = [[ButtonsLabels.PREREVIEW],
+                    [ButtonsLabels.CANCEL, ButtonsLabels.SAVE]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
@@ -260,10 +256,8 @@ class Managment(object):
         send_response(bot, update, Messages.SAVE_MESSAGE,
                       ReplyKeyboardRemove())
 
-        keyboard = get_managment_keyboard(channel.channel_id,
-                                          channel.username)
-        text = get_managment_statistics(channel.username, channel.due_date,
-                                        channel.is_running, channel.message)
+        keyboard = get_managment_keyboard(channel)
+        text = get_managment_statistics(channel)
         send_response(bot, update, text, keyboard)
 
         return ConversationHandler.END
@@ -285,10 +279,8 @@ class Managment(object):
                          reply_markup=ReplyKeyboardRemove())
 
         channel = user_data['channel']
-        keyboard = get_managment_keyboard(channel.channel_id,
-                                          channel.username)
-        text = get_managment_statistics(channel.username, channel.due_date,
-                                        channel.is_running, channel.message)
+        keyboard = get_managment_keyboard(channel)
+        text = get_managment_statistics(channel)
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
                          text=text,
@@ -314,7 +306,7 @@ class Managment(object):
         ])
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
-                         text=new_message.encode('utf-8'),
+                         text=new_message + Messages.INLINE_GUIDE,
                          reply_markup=keyboard)
 
         return States.GET_MESSAGE
@@ -331,11 +323,11 @@ class Managment(object):
         :type user_data: dict
         """
         user_message = update.effective_message.text
-        if user_message == ButtonsLabels.PREREVIEW.decode('utf-8'):
+        if user_message == ButtonsLabels.PREREVIEW:
             return Managment.preview_message(bot, update, user_data)
-        if user_message == ButtonsLabels.CANCEL.decode('utf-8'):
+        if user_message == ButtonsLabels.CANCEL:
             return Managment.cancel_message(bot, update, user_data)
-        if user_message == ButtonsLabels.SAVE.decode('utf-8'):
+        if user_message == ButtonsLabels.SAVE:
             return Managment.save_message(bot, update, user_data)
 
         if len(update.effective_message.text) > MAXIMUM_INLINE_LENGTH:
@@ -363,6 +355,7 @@ class Managment(object):
 
     @staticmethod
     @payment_required(finish_conversation=True)
+    @admin_required
     def create_post(bot, update, user_data):
         """ Creating post message for user
 
@@ -410,7 +403,7 @@ class Managment(object):
                              text=Messages.NOTHING_TO_PREVIEW)
             return States.GET_POST_DATA
 
-        text, reply_markup = get_post(post_text, post_image)
+        text, reply_markup = get_post(post_text, user_data['channel'].name, post_image)
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
                          text=text,
@@ -444,7 +437,7 @@ class Managment(object):
                         .format(Actions.JOIN_PROGRAM,
                                 channel.channel_id,
                                 channel.username)
-        text, reply_markup = get_post(post_text, post_image, callback_data)
+        text, reply_markup = get_post(post_text, channel.name, post_image)
         bot.send_message(chat_id=channel.channel_id,
                          parse_mode=ParseMode.HTML,
                          text=text,
@@ -456,12 +449,8 @@ class Managment(object):
                       ReplyKeyboardRemove())
 
         # Send user managment message with channel actions
-        keyboard = get_managment_keyboard(channel.channel_id,
-                                          channel.username)
-        text = get_managment_statistics(channel.username,
-                                        channel.due_date,
-                                        channel.is_running,
-                                        channel.message)
+        keyboard = get_managment_keyboard(channel)
+        text = get_managment_statistics(channel)
         send_response(bot, update, text, keyboard)
         return ConversationHandler.END
 
@@ -477,11 +466,11 @@ class Managment(object):
         :type user_data: dict
         """
         user_message = update.effective_message.text
-        if user_message == ButtonsLabels.PREREVIEW.decode('utf-8'):
+        if user_message == ButtonsLabels.PREREVIEW:
             return Managment.preview_post(bot, update, user_data)
-        if user_message == ButtonsLabels.CANCEL.decode('utf-8'):
+        if user_message == ButtonsLabels.CANCEL:
             return Managment.cancel_post(bot, update, user_data)
-        if user_message == ButtonsLabels.PUBLISH.decode('utf-8'):
+        if user_message == ButtonsLabels.PUBLISH:
             return Managment.publish_post(bot, update, user_data)
 
         user_data['text'] = user_message
@@ -503,13 +492,19 @@ class Managment(object):
         """
         channel = user_data['channel']
 
-        file_id = update.message.photo[0].file_id
+        file_id = update.message.photo[-1].file_id
         file_url = bot.get_file(file_id).file_path
 
-        user_data['image'] = download_image(file_url, file_id, 'post')
+        image_url = download_image(file_url, file_id, 'post')
+        if image_url:
+            user_data['image'] = image_url
+            text=Messages.RECEIVED
+        else:
+            text=Messages.POST_IMAGE_ERROR
+
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
-                         text=Messages.RECEIVED)
+                         text=text)
         return States.GET_POST_DATA
 
     @staticmethod
@@ -529,12 +524,8 @@ class Managment(object):
                          reply_markup=ReplyKeyboardRemove())
 
         channel = user_data['channel']
-        keyboard = get_managment_keyboard(channel.channel_id,
-                                          channel.username)
-        text = get_managment_statistics(channel.username,
-                                        channel.due_date,
-                                        channel.is_running,
-                                        channel.message)
+        keyboard = get_managment_keyboard(channel)
+        text = get_managment_statistics(channel)
         bot.send_message(chat_id=update.effective_chat.id,
                          parse_mode=ParseMode.HTML,
                          text=text,
@@ -545,30 +536,26 @@ class Managment(object):
 
 # !UTILS FUNCTIONS
 
-def get_managment_statistics(channel_name, due_date, is_running, message):
+def get_managment_statistics(channel):
     """ Create statistics meesage for current channel managment message
 
-    :param channel_name: chanel name
-    :type channel_name: basestring
-    :param due_date: due date not needed payment
-    :type due_date: datetime
-    :param is_running: is this channel program is running
-    :type is_running: bool
-    :param message: "hi" message
-    :type message: basestring
+    :param channel: chanel object
+    :type channel: models.Channel
     :return: message to send to user
     :rtype: str
     """
-    header = Messages.HEADER.format(channel_name)
-    status = 'ИДЕТ РЕКРУТИНГ ✅' if is_running else 'РЕКРУТИНГ ОСТАНОВЛЕН ⛔️'
+    
+    payment_status = '' if channel.has_infinite_subsribe \
+        else '▶️ Оплачено до <b>{0}</b>\n\n'.format(
+            channel.due_date.strftime("%d-%m-%Y %H:%M"))
+    
+    header = Messages.HEADER.format(channel.username)
+    status = 'ЗАПУЩЕНА ✅' if channel.is_running else 'ОСТАНОВЛЕНА ⛔️'
     return '{0}' \
-           '▶️ Рекрутская программа оплачена до <b>{1}</b>\n\n' \
-           '▶️ Текущее состояние - <b>{2}</b>\n\n' \
-           '️🔽 <b>Сообщение рекрутеров</b> 🔽\n{3}' \
-           .format(header,
-                   due_date.strftime("%d-%m-%Y %H.%M"),
-                   status,
-                   message.encode('utf-8'))
+           '{1}' \
+           '▶️ Реферальная программа <b>{2}</b>\n\n' \
+           '️🔽 <b>Сообщение ваших рекрутеров</b> 🔽\n{3}' \
+           .format(header, payment_status, status, channel.message)
 
 
 def need_payment(channel):
@@ -579,10 +566,12 @@ def need_payment(channel):
     :return: channel needs payment
     :rtype: bool
     """
+    if channel.has_infinite_subsribe:
+        return False
     return datetime.now() > channel.due_date
 
 
-def get_post(message, img_url, inline_button_callback=None):
+def get_post(message, channel_name, img_url, inline_button_callback=None):
     """ Get post data for publishing
 
     :param message: message to publish
@@ -599,46 +588,59 @@ def get_post(message, img_url, inline_button_callback=None):
         [InlineKeyboardButton(ButtonsLabels.JOIN_PROGRAM,
                               callback_data=callback_data)]
     ])
-    if not message and img_url:
-        message = '.'
-
-    text = '{0} <a href="{1}">&#8205;</a>'.format(
-        message.encode('utf-8'), img_url)
+    if not message:
+        message = Messages.POST_GUIDE.format(channel_name)
+    else:
+        message = message + '\n\n' + Messages.POST_GUIDE.format(channel_name)
+        
+    text = '{0}<a href="{1}">&#8205;</a>'.format(message, img_url)
     return text, keyboard
 
 
-def get_managment_keyboard(channel_id, channel_name):
+def get_managment_keyboard(channel):
     """ Building main managment keyboard
 
-    :param channel_id: channel id
-    :type channel_id: basestring
-    :param channel_name: channel name
-    :type channel_name: basestring
+    :param channel: channel object
+    :type channel: models.Channel
     :return: InlineKeyboardMarkup
     :rtype: telegram.InlineKeyboardMarkup
     """
-    return InlineKeyboardMarkup([
-        [Buttons.get_button(
-            Actions.START_REFERRAL,
-            ButtonsLabels.START_REFERRAL,
-            channel_id, channel_name),
+    channel_id = channel.channel_id
+    channel_name = channel.username
+
+    buttons = []
+    if not channel.has_infinite_subsribe:
+        buttons.append([Buttons.get_button(
+            Actions.START_PAYMENT, ButtonsLabels.START_PAYMENT,
+            channel_id, channel_name)])
+    
+    buttons.append([
             Buttons.get_button(
-            Actions.STOP_REFERRAL,
-            ButtonsLabels.STOP_REFERRAL,
-            channel_id, channel_name)],
-        [Buttons.get_button(
-            Actions.CREATE_MESSAGE,
-            ButtonsLabels.CREATE_MESSAGE,
-            channel_id, channel_name),
+                Actions.START_REFERRAL,
+                ButtonsLabels.START_REFERRAL,
+                channel_id, channel_name),
             Buttons.get_button(
-            Actions.CREATE_POST,
-            ButtonsLabels.CREATE_POST,
-            channel_id, channel_name)],
-        [Buttons.BACK(Actions.MANAGMENT_LIST),
-            Buttons.get_button(Actions.MANAGEMENT_HELP,
-                               ButtonsLabels.HELP,
-                               channel_id, channel_name)]
-    ])
+                Actions.STOP_REFERRAL,
+                ButtonsLabels.STOP_REFERRAL,
+                channel_id, channel_name)])
+
+    buttons.append([
+            Buttons.get_button(
+                Actions.CREATE_MESSAGE,
+                ButtonsLabels.CREATE_MESSAGE,
+                channel_id, channel_name),
+            Buttons.get_button(
+                Actions.CREATE_POST,
+                ButtonsLabels.CREATE_POST,
+                channel_id, channel_name)])
+    
+    buttons.append([
+            Buttons.BACK(Actions.MANAGMENT_LIST),
+            Buttons.get_button(
+                Actions.MANAGEMENT_HELP,
+                ButtonsLabels.HELP,
+                channel_id, channel_name)])
+    return InlineKeyboardMarkup(buttons)
 
 
 def get_need_payment_keyboard(channel_id, channel_name):
@@ -652,8 +654,13 @@ def get_need_payment_keyboard(channel_id, channel_name):
     :rtype: telegram.InlineKeyboardMarkup
     """
     return InlineKeyboardMarkup([
-        [Buttons.BACK(Actions.MANAGMENT_LIST),
-         Buttons.get_button(Actions.MANAGEMENT_HELP,
-                            ButtonsLabels.HELP,
-                            channel_id, channel_name)]
+        [Buttons.get_button(
+            Actions.START_PAYMENT, ButtonsLabels.START_PAYMENT,
+            channel_id, channel_name)],
+        [Buttons.BACK(
+            Actions.MANAGMENT_LIST),
+        Buttons.get_button(
+            Actions.MANAGEMENT_HELP,
+            ButtonsLabels.HELP,
+            channel_id, channel_name)]
     ])

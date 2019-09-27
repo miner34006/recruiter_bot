@@ -2,6 +2,7 @@
 
 import logging
 
+from telegram.ext.dispatcher import run_async
 from telegram.ext import CommandHandler
 
 from app import db_session
@@ -10,10 +11,6 @@ from app.src.bot_constants import *
 from app.src.utils import *
 
 logger = logging.getLogger()
-FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s %(module)s -' \
-         ' %(funcName)s: %(message)s'
-logging.basicConfig(format=FORMAT)
-logger.setLevel(logging.DEBUG)
 
 
 class Main(object):
@@ -38,6 +35,7 @@ class Main(object):
         :param update: update event
         :type update: relegram.Update
         """
+        logger.debug('<user:{0}>: starting dialog'.format(update.effective_user.id))
         keyboard = create_inline_keyboard([Buttons.INFORMATION])
         message = Messages.HELLO + Messages.HELP
         return send_response(bot, update, message, keyboard)
@@ -51,5 +49,6 @@ class Main(object):
         :param update: update event
         :type update: relegram.Update
         """
+        logger.debug('<user:{0}>: show bot help information'.format(update.effective_user.id))
         keyboard = create_inline_keyboard([Buttons.INFORMATION])
         return send_response(bot, update, Messages.HELP, keyboard)
