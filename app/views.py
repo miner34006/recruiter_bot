@@ -31,8 +31,13 @@ def webhook_handler():
         return '', 200
     else:
         abort(403)
-        
 
+@app.route('/{0}/is-healthy'.format(app.config['API_TOKEN']), methods=['POST', 'GET'])
+def health_check():
+    """ Health checking for nginx
+    """ 
+    return '', 200
+        
 @app.route('/{0}/payment-notification'.format(app.config['API_TOKEN']), methods=['POST'])
 def receive_payment_notification(): 
     logger.debug('Handling notification with request data {0}'.format(request.json))
