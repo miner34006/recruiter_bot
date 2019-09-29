@@ -437,7 +437,7 @@ class Managment(object):
                         .format(Actions.JOIN_PROGRAM,
                                 channel.channel_id,
                                 channel.username)
-        text, reply_markup = get_post(post_text, channel.name, post_image)
+        text, reply_markup = get_post(post_text, channel.name, post_image, callback_data)
         bot.send_message(chat_id=channel.channel_id,
                          parse_mode=ParseMode.HTML,
                          text=text,
