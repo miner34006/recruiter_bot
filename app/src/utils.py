@@ -177,7 +177,7 @@ def get_channel_logo(bot, channel_id):
     """
     chat = bot.get_chat(channel_id)
     if chat.photo:
-        file_id = chat.photo.small_file_id
+        file_id = chat.photo.big_file_id
         file = bot.get_file(file_id)
         return file.file_path
 
