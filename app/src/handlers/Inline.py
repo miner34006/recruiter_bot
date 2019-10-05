@@ -4,7 +4,7 @@ import uuid
 import logging
 from datetime import datetime
 
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from telegram import InlineKeyboardButton, \
                      InlineQueryResultArticle, \
                      InputTextMessageContent
@@ -132,7 +132,7 @@ class Inline(object):
                                     Channel.message, ChannelInviter.code) \
             .join(ChannelInviter,
                   ChannelInviter.channel_id == Channel.channel_id)\
-            .filter(Channel.name.lower().startswith(update.inline_query.query.lower()),
+            .filter(Channel.name.ilike('%{0}%'.format(update.inline_query.query)),
                     ChannelInviter.inviter_id == update.effective_user.id,
                     Channel.is_running == True,
                     or_(Channel.due_date >= datetime.now(), Channel.has_infinite_subsribe == True))
