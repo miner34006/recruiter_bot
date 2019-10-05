@@ -19,7 +19,7 @@ class Channel(db.Model):
                      nullable=False)
     username = db.Column(db.String(CHANNEL_NAME_MAX_LENGTH), nullable=False,
                          unique=True)
-    admin = db.Column(db.String(USERNAME_MAX_LENGTH), nullable=False)
+    admin_id = db.Column(db.BigInteger, nullable=False)
     message = db.Column(db.Text)
     is_running = db.Column(db.Boolean, default=True)
     due_date = db.Column(db.DateTime, nullable=True)
@@ -28,17 +28,17 @@ class Channel(db.Model):
     inviters = db.relationship('ChannelInviter', back_populates="channel")
     receivers = db.relationship('Referral', back_populates='channel')
 
-    def __init__(self, channel_id, username, name, admin=None,
+    def __init__(self, channel_id, username, name, admin_id,
                  message=None, due_date=None):
         self.channel_id = channel_id
         self.username = username
         self.name = name
-        self.admin = admin
+        self.admin_id = admin_id
         self.message = message or Messages.INLINE_MESSAGE.format(channel=name)
         self.due_date = due_date or datetime.today() + timedelta(days=1)
 
     def __repr__(self):
-        return '<Channel {0}>'.format(self.name)
+        return '<Channel {0}>'.format(self.channel_id)
 
     @classmethod
     def exists_in_db(cls, channel_id):
@@ -52,18 +52,21 @@ class Inviter(db.Model):
     __table_args__ = {'extend_existing': True}
 
     inviter_id = db.Column(db.BigInteger, primary_key=True)
-    name = db.Column(db.String(USERNAME_MAX_LENGTH), unique=True,
-                     nullable=False)
+    name = db.Column(db.String(USERNAME_MAX_LENGTH), unique=True, nullable=True)
+    first_name = db.Column(db.String, nullable=True)
+    last_name = db.Column(db.String, nullable=True)
 
     channels = db.relationship('ChannelInviter', back_populates="inviter")
     receivers = db.relationship('Referral', back_populates='inviter')
 
-    def __init__(self, inviter_id, name):
+    def __init__(self, inviter_id, name=None, first_name=None, last_name=None):
         self.inviter_id = inviter_id
         self.name = name
+        self.first_name = first_name
+        self.last_name = last_name
 
     def __repr__(self):
-        return '<Inviter {0}>'.format(self.name)
+        return '<Inviter {0}>'.format(self.inviter_id)
 
 
 class ChannelInviter(db.Model):

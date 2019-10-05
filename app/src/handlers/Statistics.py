@@ -54,8 +54,8 @@ class Statistics(object):
         """
         logger.debug('<user:{0}>: request for statistics'.format(
             update.effective_user.id))
-        username = update.effective_user.username
-        channels = db_session.query(Channel).filter_by(admin=username)
+        user_id = update.effective_user.id
+        channels = db_session.query(Channel).filter_by(admin_id=user_id)
         if not db_session.query(channels.exists()).scalar():
             logger.debug('<user:{0}> no channels available for stat'.format(
                 update.effective_user.id))
@@ -171,18 +171,20 @@ def get_channel_statistics(bot, channel_id, db_session):
     logger.debug('new users from referral program: {0}'.format(new_users))
 
     top_users = db_session \
-        .query(Referral.inviter_id, Inviter.name) \
+        .query(Referral.inviter_id, Inviter.name, Inviter.first_name, Inviter.last_name) \
         .join(Inviter, Referral.inviter_id == Inviter.inviter_id) \
         .filter(Referral.channel_id == channel_id) \
         .group_by(Referral.inviter_id, Inviter.name) \
         .order_by(Referral.inviter_id.desc())
 
     top_users_stats = []
-    for user_id, username in top_users:
+    for user_id, username, first_name, last_name in top_users:
         invited_users = [id for id, in db_session.query(Referral.receiver_id)
                          .filter_by(inviter_id=user_id)]
         invited_users = len(set(invited_users) & new_users)
         if invited_users:
+            if not username:
+                username = '{0} {1}'.format(first_name, last_name)
             top_users_stats.append((username, invited_users))
 
     top_users_stats = sorted(top_users_stats,

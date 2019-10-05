@@ -103,14 +103,14 @@ class NewChannel(object):
                 return GET_FORWARDED
 
             name = update.message.forward_from_chat.title
-            username = update.message.from_user.username
-            channels =  db_session.query(Channel).filter_by(admin=username)
+            user_id = update.message.from_user.id
+            channels =  db_session.query(Channel).filter_by(admin_id=user_id)
 
             due_date = datetime.today() + timedelta(days=1) \
                 if db_session.query(channels.exists()).scalar() \
                 else datetime.today() + timedelta(days=6)
 
-            channel = Channel(channel_id, channel_username, name, username,
+            channel = Channel(channel_id, channel_username, name, user_id,
                               due_date=due_date)
             db_session.add(channel)
             db_session.commit()

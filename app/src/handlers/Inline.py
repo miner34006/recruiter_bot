@@ -59,7 +59,7 @@ class Inline(object):
         if not db_session.query(Inviter.inviter_id).filter_by(
                 inviter_id=user_id).scalar():
             logger.debug('Adding inviter <{0}> to DB'.format(user_id))
-            inviter = Inviter(user_id, username)
+            inviter = Inviter(user_id, username, update.effective_user.first_name, update.effective_user.last_name)
             db_session.add(inviter)
 
         q = db_session.query(ChannelInviter).filter_by(inviter_id=user_id,
@@ -132,7 +132,7 @@ class Inline(object):
                                     Channel.message, ChannelInviter.code) \
             .join(ChannelInviter,
                   ChannelInviter.channel_id == Channel.channel_id)\
-            .filter(Channel.name.startswith(update.inline_query.query),
+            .filter(Channel.name.lower().startswith(update.inline_query.query.lower()),
                     ChannelInviter.inviter_id == update.effective_user.id,
                     Channel.is_running == True,
                     or_(Channel.due_date >= datetime.now(), Channel.has_infinite_subsribe == True))

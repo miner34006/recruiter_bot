@@ -126,11 +126,11 @@ class Managment(object):
         :param update: update event
         :type update: relegram.Update
         """
-        username = update.effective_user.username
-        channels = db_session.query(Channel).filter_by(admin=username)
+        user_id = update.effective_user.id
+        channels = db_session.query(Channel).filter_by(admin_id=user_id)
         if not db_session.query(channels.exists()).scalar():
             logger.info('User <{0}> has no channels for managment'
-                        .format(username))
+                        .format(user_id))
             return send_response(bot, update, Messages.NO_REFERRAL_CHANNELS)
 
         buttons = [
