@@ -174,7 +174,7 @@ def get_channel_statistics(bot, channel_id, db_session):
         .query(Referral.inviter_id, Inviter.name, Inviter.first_name, Inviter.last_name) \
         .join(Inviter, Referral.inviter_id == Inviter.inviter_id) \
         .filter(Referral.channel_id == channel_id) \
-        .group_by(Referral.inviter_id, Inviter.name) \
+        .group_by(Referral.inviter_id, Inviter.name, Inviter.first_name, Inviter.last_name) \
         .order_by(Referral.inviter_id.desc())
 
     top_users_stats = []
